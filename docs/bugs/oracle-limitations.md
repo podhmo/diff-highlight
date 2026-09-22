@@ -39,3 +39,14 @@ line collapse into a single highlighted blob.
 `-a   ` vs `+a   b` produces `-a   <REV><NO>`: a zero-length highlight
 span on the removed side. Harmless but odd; inherited as-is. See
 `testdata/golden/whitespace-lines.*`.
+
+## git config ignored on native Windows (cmd.exe quoting)
+
+The oracle reads colors via backticks:
+`` `git config --type=color --get-regexp '^color\.diff-highlight\.'` ``.
+Under native Windows perl, backticks run through cmd.exe, where the
+single-quoted regexp is taken literally (quotes included) — it matches
+nothing, so `color.diff-highlight.*` settings are silently ignored and
+defaults apply. Upstream bug, not reproduced in the Go port (which
+passes the regexp as an argv element). The two env-config
+`TestOracleComparison` cases are skipped on Windows for this reason.
