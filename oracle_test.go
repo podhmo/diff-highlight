@@ -117,9 +117,12 @@ func TestOracleComparison(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// binmode disables perl's CRLF text layer on Windows so the
+			// byte-compare checks the algorithm, not stdio translation.
+			// No-op on Unix.
 			cmd := exec.Command("perl",
 				"-I", "oracle", "-MDiffHighlight",
-				"-e", "DiffHighlight::highlight_stdin()")
+				"-e", "binmode STDIN; binmode STDOUT; DiffHighlight::highlight_stdin()")
 			cmd.Stdin = bytes.NewReader(tc.input)
 			cmd.Env = append(os.Environ(), tc.env...)
 			want, err := cmd.Output()
