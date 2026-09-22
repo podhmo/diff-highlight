@@ -54,10 +54,17 @@ Oracle: `oracle/`.
 - [x] Cross-platform (Windows support)
   - `os.DevNull` used for the `git config` stderr redirect (never
     hardcode `/dev/null`).
-  - Decided to stay stdlib-only: no `golang.org/x/sys` dependency for
-    virtual-terminal processing (the task left this open).
   - `\r\n` input covered by golden test (`crlf.in`). Runtime verification
     on Windows itself is still pending.
+- [ ] Windows console VT processing (split out per review on PR #2;
+      deferred to a follow-up)
+  - On cmd.exe/PowerShell consoles ANSI escapes print raw until
+    `ENABLE_VIRTUAL_TERMINAL_PROCESSING` is set on the console handle.
+    Enable it when stdout/stderr are real consoles (leave pipes/files
+    alone): `windows.GetConsoleMode` + `SetConsoleMode(mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)`
+    via `golang.org/x/sys/windows` (allowed per `docs/design.md`).
+  - The Perl oracle doesn't do this either; under git-bash/MSYS2 ANSI
+    works through the pty regardless.
 
 ## Test tasks (golden tests based on the oracle)
 
