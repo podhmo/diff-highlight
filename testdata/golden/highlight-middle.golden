@@ -1,0 +1,5 @@
+@@ -1,3 +1,3 @@
+ aaa
+-b<REVERSE>b<NOREVERSE>b
++b<REVERSE>0<NOREVERSE>b
+ ccc

@@ -1,0 +1,6 @@
+@@ -1 +1 @@
+-a<REVERSE>a<NOREVERSE>a
++a<REVERSE>b<NOREVERSE>a
+@@ -5 +5 @@
+-x<REVERSE>x<NOREVERSE>x
++x<REVERSE>y<NOREVERSE>x

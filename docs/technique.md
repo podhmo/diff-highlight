@@ -180,7 +180,8 @@ is an open consideration — see tasks.
 
 - `visible_width($s)`: count visible characters, skipping COLOR tokens.
 - `visible_substr($s, $n)`: return the string minus the first `n`
-  visible characters (COLOR tokens don't count but are kept).
+  visible characters; leading COLOR tokens don't count and are dropped
+  by `s/^$COLOR//` (along with the removed characters).
 
 ## Known limitations (oracle README "Bugs")
 
