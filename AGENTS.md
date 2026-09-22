@@ -1,17 +1,22 @@
 # AGENTS.md
 
-git/contrib/diff-highlight(Perl)の Go 移植。オラクルは `oracle/`、
-詳細仕様は `docs/technique.md`、設計方針は `docs/design.md`、
-やるべきタスクは `docs/tasks.md` を参照。
+Go port of git/contrib/diff-highlight (Perl). Oracle: `oracle/`.
+Detailed spec: `docs/technique.md`. Design policy: `docs/design.md`.
+Task list: `docs/tasks.md`.
 
-## 基本方針
+## Policy
 
-- Go 1.27、依存は最小限(標準ライブラリ基本)、Windows も動作対象。
-- `package main` はトップレベル(`go install github.com/podhmo/diff-highlight@latest`)。
-- 変更は常に `go fix` / `gofmt` / `go vet` / `go test ./...` が通る状態に保つ。
+- Go 1.27, minimal dependencies (standard library first), Windows is a
+  supported target.
+- `package main` stays at the top level
+  (`go install github.com/podhmo/diff-highlight@latest`).
+- Keep `go fix` / `gofmt` / `go vet` / `go test ./...` passing at all
+  times.
 
-## バグの記録
+## Recording bugs
 
-- 作業中に気づいたバグ・不審な挙動は、**その時のタスクと関係なく**
-  `docs/bugs/` 以下に記録する。1 バグ 1 ファイル、再現入力があれば添える。
-- オラクル由来の既知の限界と、Go 版で見つかった本物のバグは区別して書く。
+- Record any bug or suspicious behavior you notice under `docs/bugs/`,
+  **regardless of the task at hand**: one file per bug, include a
+  reproducing input when available.
+- Distinguish known limitations inherited from the oracle from real bugs
+  found in the Go port.
