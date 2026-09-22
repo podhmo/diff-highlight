@@ -1,0 +1,2 @@
+testdata/**/*.in text eol=lf
+testdata/**/*.golden text eol=lf

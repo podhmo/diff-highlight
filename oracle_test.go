@@ -87,11 +87,17 @@ func TestOracleComparison(t *testing.T) {
 		"GIT_CONFIG_KEY_2=color.diff-highlight.newnormal", "GIT_CONFIG_VALUE_2=green",
 		"GIT_CONFIG_KEY_3=color.diff-highlight.newhighlight", "GIT_CONFIG_VALUE_3=yellow",
 	}
-	simple := []byte("@@ -1 +1 @@\n-prefix a suffix\n+prefix b suffix\n")
-	cases = append(cases,
-		oracleCase{"config-set-reset", simple, setResetEnv},
-		oracleCase{"config-normal-highlight", simple, normalHlEnv},
-	)
+	// On Windows the oracle's `git config` backtick call runs under
+	// cmd.exe, where the single-quoted regexp is literal — it matches
+	// nothing and the oracle silently falls back to defaults. An
+	// upstream platform limitation; skip the git-config cases there.
+	if runtime.GOOS != "windows" {
+		simple := []byte("@@ -1 +1 @@\n-prefix a suffix\n+prefix b suffix\n")
+		cases = append(cases,
+			oracleCase{"config-set-reset", simple, setResetEnv},
+			oracleCase{"config-normal-highlight", simple, normalHlEnv},
+		)
+	}
 
 	// deterministic fuzz: plausible-looking diff/graph/color lines
 	rng := rand.New(rand.NewSource(1))
