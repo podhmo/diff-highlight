@@ -1,17 +1,8 @@
 # tasks
 
 Go で git/contrib/diff-highlight を完全再現するためのタスク。
-詳細な仕様は `docs/technique.md`、オラクルは `oracle/` を参照。
-
-方針:
-
-- 依存は最小限。標準ライブラリを基本とするが、Windows 対応などに
-  必要なら最小限の外部依存(例: `golang.org/x/sys`)は許容する。
-- Windows でも動作すること(Linux/macOS 専用のコードにしない)。
-- `package main` をトップレベルに置き、
-  `go install github.com/podhmo/diff-highlight@latest` でインストールできる構成
-  にする(既存の空の `main.go` の位置を維持)。内部実装は必要に応じて
-  `internal/` パッケージに分けてよいが、外部に公開する API は作らない。
+詳細な仕様は `docs/technique.md`、方針・設計は `docs/design.md`、
+オラクルは `oracle/` を参照。
 
 ## 実装タスク
 
@@ -63,6 +54,8 @@ Go で git/contrib/diff-highlight を完全再現するためのタスク。
 
 ## テストタスク(オラクルを基準にした golden テスト)
 
+※ ゴールデンテストの実行は実装タスクの直後に行う。
+
 `oracle/t/t9400-diff-highlight.sh` の `dh_test` 相当を Go のテストに移植する。
 テスト入力は「`@@` 以降のハンク部分」と期待 ANSI 出力を testdata に置くか、
 実 git リポジトリで diff を生成する形を検討(後者は git 依存になるので CI
@@ -82,7 +75,7 @@ Go で git/contrib/diff-highlight を完全再現するためのタスク。
 
 ## 仕上げ
 
-- [ ] `go vet` / `go test ./...` が通る
+- [ ] `go fix` / `gofmt` / `go vet` / `go test ./...` が通る
 - [ ] README に Go 版の使い方を追記するかは別途検討
 - [ ] `oracle/` をリポジトリに残すか判断(参照用に残すなら
       ライセンス表記の確認: git は GPLv2、本リポジトリも GPLv2 なので整合)
