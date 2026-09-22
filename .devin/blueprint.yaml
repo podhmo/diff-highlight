@@ -1,0 +1,23 @@
+# https://docs.devin.ai/onboard-devin/environment-yaml
+# Commands run from the repo root.
+# One-time setup (e.g., install system tools, global CLIs).
+initialize: |
+  # Go 1.27 toolchain (go.mod requires 1.27)
+  curl -sL https://go.dev/dl/go1.27.1.linux-amd64.tar.gz -o /tmp/go.tar.gz
+  sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf /tmp/go.tar.gz
+  sudo ln -sf /usr/local/go/bin/go /usr/local/bin/go
+  sudo ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+# Install project dependencies (runs during builds, surfaced to agent at session start).
+maintenance: |
+  go mod download
+# Reference info for agent
+knowledge:
+  - name: lint
+    contents: |
+      gofmt -l . && go vet ./... && go fix ./...
+  - name: test
+    contents: |
+      go test ./...  # includes oracle byte-diff harness; requires perl
+  - name: build
+    contents: |
+      go build -o diff-highlight .
