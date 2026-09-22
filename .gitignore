@@ -1,5 +1,6 @@
 # Build artifacts
 /diff-highlight
+/diff-highlight.exe
 *.test
 *.out
 
