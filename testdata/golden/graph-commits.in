@@ -1,0 +1,11 @@
+* commit
+diff --git a/f b/f
+@@ -1 +1 @@
+-foo
++f0o
+
+* commit2
+diff --git a/g b/g
+@@ -1 +1 @@
+-aaa
++aba

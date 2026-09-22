@@ -1,0 +1,3 @@
+<RED>@@ -1 +1 @@<RESET>
+<RED>-prefix <REVERSE>a<NOREVERSE> suffix<RESET>
+<GREEN>+prefix <REVERSE>b<NOREVERSE> suffix<RESET>

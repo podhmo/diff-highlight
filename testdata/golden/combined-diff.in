@@ -1,0 +1,6 @@
+diff --cc file
+--- a/file
++++ b/file
+@@@ -1,1 -1,0 +1,1 @@@
+- modified content
+++resolved content
