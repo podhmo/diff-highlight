@@ -1,195 +1,207 @@
-# diff-highlight 技術メモ
+# diff-highlight technical notes
 
-オラクル: https://github.com/git/git/tree/master/contrib/diff-highlight
-(本リポジトリの `oracle/` 以下に当該ソースをスナップショットとして保存している)
+Oracle: https://github.com/git/git/tree/master/contrib/diff-highlight
+(A snapshot of the upstream sources is kept under `oracle/` in this repository.)
 
-## 目的と全体像
+## Goal and overview
 
-unified diff(`git log -p --color` など)を後処理するストリーミングフィルタ。
-「削除行 `-` と追加行 `+` のペア」を見つけ、行内で実際に変わった部分だけを
-ANSI カラーで強調する。行指向 diff を壊さないよう、入力と出力は
-「時折ハイライトが入る」以外は完全に同じになることを目指す。
+A streaming post-processing filter for unified diffs (`git log -p --color`,
+etc.). It finds pairs of removed `-` and added `+` lines and highlights only
+the intra-line differences with ANSI colors. To preserve the line-oriented
+diff, the output must be identical to the input except for the occasional
+highlight.
 
-構成(git 本家側):
+Upstream layout (git tree):
 
-- `diff-highlight.perl`: 8 行の薄いラッパー。`SIG{PIPE} = 'DEFAULT'` を設定し
-  `DiffHighlight::highlight_stdin()` を呼ぶだけ。
-- `DiffHighlight.pm`: 実装本体(約 300 行)。
-- `Makefile`: `shebang + DiffHighlight.pm + diff-highlight.perl` を `cat` して
-  単一実行ファイル `diff-highlight` を生成する。
-- `t/t9400-diff-highlight.sh`: git のテストフレームワーク(test-lib.sh)上の
-  シェルテスト。
+- `diff-highlight.perl`: an 8-line thin wrapper. Sets `SIG{PIPE} = 'DEFAULT'`
+  and calls `DiffHighlight::highlight_stdin()`.
+- `DiffHighlight.pm`: the actual implementation (~300 lines).
+- `Makefile`: builds the single `diff-highlight` executable by concatenating
+  `shebang + DiffHighlight.pm + diff-highlight.perl`.
+- `t/t9400-diff-highlight.sh`: shell tests on git's test framework
+  (test-lib.sh).
 
-Go 版では cat 結合や Makefile は不要。`package main` 1 つでよい。
+The Go port needs neither the cat-assembly nor a Makefile; a single
+`package main` suffices.
 
-## 状態と I/O モデル
+## State and I/O model
 
-フィルタの内部状態:
+Filter-internal state:
 
-- `@removed` / `@added`: 現在のハンク内でバッファした `-` 行 / `+` 行。
-- `$in_hunk`: 直前の行がハンク内にいたか。
-- `$graph_indent`: `git log --graph` の左側グラフ描画("| * " 等)の可視幅。
-  この幅だけ先頭を捨ててから diff 判定する。
+- `@removed` / `@added`: buffered `-` / `+` lines of the current hunk.
+- `$in_hunk`: whether the previous line was inside a hunk.
+- `$graph_indent`: visible width of the left-side graph drawing
+  ("| * " etc.) from `git log --graph`. This many visible columns are
+  stripped before diff detection.
 
-出力はコールバック経由:
+Output goes through callbacks:
 
-- `$line_cb`: 行の出力(デフォルト `print`)。複数行まとめて呼ばれることもある。
-- `$flush_cb`: 「論理的な塊が終わった」ときの出力フラッシュ(デフォルト stdout flush)。
+- `$line_cb`: emits lines (default: `print`). May be called with multiple
+  lines at once.
+- `$flush_cb`: flushes output when a "logical chunk" is done
+  (default: flush stdout).
 
-Go 版ではこれらは `bufio.Writer` + `Flush()` に置き換えられる。
+In Go these map to a `bufio.Writer` plus `Flush()`.
 
-## 正規表現(アトム)
+## Regex atoms
 
-- `COLOR = /\x1b\[[0-9;]*m/`: SGR シーケンス 1 個。
-- `BORING = /$COLOR|\s/`: カラーまたは空白。
-- `RESET = "\x1b[m"`。
+- `COLOR = /\x1b\[[0-9;]*m/`: one SGR sequence.
+- `BORING = /$COLOR|\s/`: a color or whitespace.
+- `RESET = "\x1b[m"`.
 
-## handle_line(行ごとの状態機械)
+## handle_line (per-line state machine)
 
-1. **グラフ行の検出**:
-   `/^(?:COLOR?\|COLOR? )* COLOR?\*COLOR? (?:COLOR?\|COLOR? )* * /x` に
-   マッチしたら `--graph` のコミット開始行とみなす。
-   - まず `flush()`(前のハンクのインデントと混ざらないよう先に吐き出す)。
-   - `$graph_indent = visible_width($&)`(マッチした prefix の可視幅)。
+1. **Graph-line detection**: matching
+   `/^(?:COLOR?\|COLOR? )* COLOR?\*COLOR? (?:COLOR?\|COLOR? )* * /x`
+   marks the start of a `--graph` commit.
+   - `flush()` first (so a queued hunk isn't mixed with a differently
+     indented commit).
+   - `$graph_indent = visible_width($&)` (visible width of the matched
+     prefix).
 
-2. **グラフインデント処理**: `$graph_indent > 0` のとき、
-   - 行の長さが indent 未満なら `$graph_indent = 0` に戻す。
-   - そうでなければ `visible_substr($_, $graph_indent)` で先頭を可視幅分だけ
-     捨てたものを判定対象にする(出力には `$_` ではなくオリジナル `$orig` を使う点に注意)。
+2. **Graph indent handling**: when `$graph_indent > 0`:
+   - If the line is shorter than the indent, reset `$graph_indent = 0`.
+   - Otherwise replace `$_` with `visible_substr($_, $graph_indent)` for
+     detection — note the original `$orig` is still used for output.
 
-3. **ハンク状態機械**:
-   - `!$in_hunk` なら: そのまま `$line_cb` で出力し、
-     行が `/^COLOR*\@\@ /`(`@@ ` で始まる、色付き可)なら `$in_hunk = 1`。
-     - `@@@`(combined diff)は `@@ ` にマッチしないため**そのまま素通し**
-       される(テスト "ignores combined diffs")。
-   - `$in_hunk` で `/^COLOR*-/` なら `@removed` に push。
-   - `$in_hunk` で `/^COLOR*\+/` なら `@added` に push。
-   - それ以外(コンテクスト行、`\ No newline at end of file` 等):
-     `flush()` してから出力し、`$in_hunk = /^COLOR*[\@ ]/` で再評価。
-     (ハンク中の `\` 行はここでハンクを終了させる。)
+3. **Hunk state machine**:
+   - `!$in_hunk`: emit the line as-is; set `$in_hunk = 1` if it matches
+     `/^COLOR*\@\@ /` (starts with `@@ `, possibly colored).
+     - `@@@` (combined diff) does not match `@@ `, so combined diffs pass
+       through untouched (test "ignores combined diffs").
+   - `$in_hunk` and `/^COLOR*-/`: push onto `@removed`.
+   - `$in_hunk` and `/^COLOR*\+/`: push onto `@added`.
+   - Anything else (context lines, `\ No newline at end of file`, etc.):
+     `flush()`, emit, then re-evaluate `$in_hunk = /^COLOR*[\@ ]/`.
+     (A `\` line inside a hunk therefore terminates the hunk.)
 
-4. **ブランク行で flush_cb**: `/^$/` なら `$flush_cb->()`。
-   `git log` の出力がコミット間で空白行を挟むヒューリスティックで、
-   長時間無出力になりがちな `git log -S` でも早期に見えるようにするため。
+4. **Blank line flush**: `/^$/` triggers `$flush_cb->()`. A heuristic that
+   matches `git log`'s blank separator between commits, so output appears
+   early even for slow-producing commands like `git log -S`.
 
 ## show_hunk / flush
 
-`flush()` は `show_hunk(\@removed, \@added)` して両バッファを空にする。
-`highlight_stdin()` は入力終了後にも `flush()` を呼ぶ(末尾ハンク対策)。
+`flush()` calls `show_hunk(\@removed, \@added)` and clears both buffers.
+`highlight_stdin()` also calls `flush()` after EOF (trailing hunk).
 
 `show_hunk($a, $b)`:
 
-- 片側が空なら比較不能 → そのまま順に出力。
-- 行数が違えば単純にそのまま出力(位置合わせを諦める。\
-  "simple and stupid" 方針。テスト "mismatched hunk size" は
-  現状 test_expect_failure)。
-- 行数が同じなら **i 番目の削除行と i 番目の追加行**を `highlight_pair` に
-  渡し、削除行は即出力、追加行はキューにためて最後にまとめて出力
-  (削除ブロック → 追加ブロックの順序を保つため)。
+- Either side empty → nothing to compare → emit as-is.
+- Different line counts → emit as-is (no clever alignment; "simple and
+  stupid" policy. The "mismatched hunk size" test is currently a
+  test_expect_failure upstream).
+- Same line count → pair the i-th removed line with the i-th added line
+  via `highlight_pair`. Removed lines are emitted immediately; added
+  lines are queued and emitted afterwards (preserving the
+  removed-block-then-added-block order).
 
-## highlight_pair(コアアルゴリズム)
+## highlight_pair (core algorithm)
 
-2 行をトークン列に分解(`split_line`)してから処理する。
+Both lines are tokenized by `split_line` first.
 
 ### split_line
 
-1. 行を `/(COLOR+)/` で分割(キャプチャ付きなので区切りも残る)。
-2. 各要素が COLOR ならそのまま 1 トークン、そうでなければ `split //`
-   で **1 文字 1 トークン** に分解。
-3. その前に `utf8::decode` しておくことで、マルチバイト UTF-8 も
-   「1 文字」として扱う(分割後に `utf8::encode` でバイト列に戻す)。
+1. Split on `/(COLOR+)/` (capturing, so delimiters are kept).
+2. Each element that is a COLOR becomes one token; anything else is split
+   with `split //` into **one token per character**.
+3. `utf8::decode` beforehand makes multibyte UTF-8 count as one
+   character (tokens are re-encoded with `utf8::encode` afterwards).
 
-Go 版では「ANSI シーケンスをアトム、残りは rune 単位」で等価。
-結合文字(combining code points)は Perl 側でも 1 文字として扱えず
-テストが test_expect_failure になっている → Go 版も素の rune 分割で
-同じ限界を受け入れるのが移植として素直。
+In Go the equivalent is: ANSI sequences as atomic tokens, everything else
+split per rune. Combining code points are not handled as single
+characters in Perl either (that test is test_expect_failure upstream) —
+accepting the same limitation with plain rune splitting is the faithful
+port.
 
-### 共通 prefix スキャン
+### Common prefix scan
 
-`$pa`, `$pb` を先頭から進める。各ステップで:
+Advance `$pa`, `$pb` from the front. Each step:
 
-- `a[$pa]` が COLOR なら `$pa++`(色を飛ばす)。
-- `b[$pb]` が COLOR なら `$pb++`。
-- 両者が等しいトークンなら両方進める。
-- **未だ `seen_plusminus` が立っておらず** `a[$pa] eq '-'` かつ
-  `b[$pb] eq '+'` なら、先頭の diff マーカー対として両方進めて
-  `seen_plusminus = 1`(行頭の `-`/`+` は違って当然なので一致扱い)。
-- それ以外で打ち切り。
+- `a[$pa]` is COLOR → `$pa++` (skip colors).
+- `b[$pb]` is COLOR → `$pb++`.
+- Equal tokens → advance both.
+- If `seen_plusminus` not yet set and `a[$pa] eq '-'` and
+  `b[$pb] eq '+'`: treat as the leading diff marker pair, advance both,
+  set `seen_plusminus = 1` (the leading `-`/`+` always differs).
+- Otherwise stop.
 
-### 共通 suffix スキャン
+### Common suffix scan
 
-`$sa = $#a`, `$sb = $#b` から末尾向きに。COLOR を飛ばしつつ
-等しいトークンが続く間だけデクリメント。prefix/suffix が
-交差する範囲(`$sa >= $pa` かつ `$sb >= $pb`)まで。
+From `$sa = $#a`, `$sb = $#b` backwards: skip colors, decrement while
+tokens are equal, bounded by the prefix positions (`$sa >= $pa` and
+`$sb >= $pb`).
 
-### is_pair_interesting(全体ハイライト抑止)
+### is_pair_interesting (suppress whole-line highlight)
 
-「行全体が強調されるなら、もはや行単位 diff と同じで意味がない」
-のでハイライトしないルール。
+If the whole line would be highlighted, highlighting is noise — same as
+the line-level diff — so suppress it.
 
-- `$pa == @$a` or `$pb == @$b`(= 2 行が完全一致、prefix が行全体を消費)
-  → not interesting。`foo` → `foo`(末尾改行の有無差)のような
-  diff が non-minimal なときに起きる。
-- prefix/suffix が「つまらない」ものだけなら not interesting:
-  - `visible_substr($prefix_a, $graph_indent)` が
-    `/^COLOR*-$BORING*$/`(= `-` と空白/色だけ)なら prefix_a は boring。
-    `+` 側も同様。
-  - suffix_a/suffix_b が `/^BORING*$/` なら boring。
-  - 4 つとも boring → not interesting(ハイライト範囲が行全体に
-    なってしまうケース)。
+- `$pa == @$a` or `$pb == @$b` (lines identical; prefix consumed
+  everything) → not interesting. Happens with non-minimal diffs like
+  `foo` → `foo` where only the trailing newline differs.
+- prefix/suffix containing only "boring" tokens → not interesting:
+  - `visible_substr($prefix_a, $graph_indent)` matching
+    `/^COLOR*-$BORING*$/` (just `-` plus whitespace/colors) → boring.
+    Same for `+` on the b side.
+  - `suffix_a`/`suffix_b` matching `/^BORING*$/` → boring.
+  - All four boring → not interesting (highlight would span the whole
+    line).
 
-### highlight_line(色の付け方 2 モード)
+### highlight_line (two coloring modes)
 
-トークン列を `[0..prefix-1] | [prefix..suffix] | [suffix+1..end]` に
-3 分割して join した `start | mid | end` に対し:
+Join tokens into three spans `[0..prefix-1] | [prefix..suffix] |
+[suffix+1..end]` → `start | mid | end`:
 
-- **normal 色ありモード**(`theme[0]` が定義):
-  既存の色を全部剥がし(`s/COLOR//g`)、
+- **normal color mode** (`theme[0]` defined): strip all existing colors
+  (`s/COLOR//g`), then emit
   `normal + start + RESET + highlight + mid + RESET + normal + end + RESET + \n`
-  を組み立てる(行全体を取り仕切る)。
-- **highlight/reset モード**(`theme[0]` 未定義):
-  既存色は残したまま、mid の前後にだけ
-  `start + highlight + mid + reset + end` を差し込む。
+  (the theme takes over the whole line).
+- **highlight/reset mode** (`theme[0]` undefined): keep existing colors,
+  splice `highlight`/`reset` around mid only:
+  `start + highlight + mid + reset + end`.
 
-## 色設定(color_config / load_color_config)
+## Color configuration (color_config / load_color_config)
 
-- テーマ: `@OLD_HIGHLIGHT` / `@NEW_HIGHLIGHT`、各 3 要素
-  `(normal, highlight, reset)`。
-- 外部(モジュール利用側)から設定されていなければ遅延で
+- Themes: `@OLD_HIGHLIGHT` / `@NEW_HIGHLIGHT`, 3 elements each:
+  `(normal, highlight, reset)`.
+- If not set externally (module consumers may set them), lazily run
   `git config --type=color --get-regexp '^color\.diff-highlight\.'`
-  を実行して読む(stderr は devnull へ)。**git が実行できなくても動く**
-  よう自前のフォールバックを持つ設計(コメント参照)。
-- デフォルト: `oldhighlight = "\x1b[7m"`(反転), `oldreset = "\x1b[27m"`。
-  `new*` が未指定なら `old*` にフォールバック。
-- 設定キー: `color.diff-highlight.{old,new}{Normal,Highlight,Reset}`。
+  (stderr → devnull) and cache. Deliberately has its own fallback so it
+  **works even when git cannot be run** (see the code comment).
+- Defaults: `oldhighlight = "\x1b[7m"` (reverse), `oldreset = "\x1b[27m"`.
+  `new*` falls back to `old*` when unset.
+- Config keys: `color.diff-highlight.{old,new}{Normal,Highlight,Reset}`.
 
-Go 版でも `exec.Command("git", "config", ...)` + フォールバックで
-同等にできる。git 非依存にしたければ環境変数や自前パーサも検討(タスク参照)。
+The Go port can do the same with `exec.Command("git", "config", ...)`
+plus a fallback. Whether to stay git-independent (env vars, own parser)
+is an open consideration — see tasks.
 
-## ユーティリティ
+## Utilities
 
-- `visible_width($s)`: COLOR トークンを飛ばして可視文字数を数える。
-- `visible_substr($s, $n)`: 先頭から可視文字 n 個を捨てた残りを返す
-  (COLOR は幅に数えず、そのまま残る)。
+- `visible_width($s)`: count visible characters, skipping COLOR tokens.
+- `visible_substr($s, $n)`: return the string minus the first `n`
+  visible characters (COLOR tokens don't count but are kept).
 
-## 既知の限界(オラクル README の "Bugs")
+## Known limitations (oracle README "Bugs")
 
-1. 1 行に複数の変更があると 1 つのブロブにまとめて強調される
-   (`foo(buf, size)` → `foo(obj->buf, obj->size)` は括弧内全体)。
-   word-diff 的な境界を入れない限り避けられない設計判断。
-2. 複数行ペアは位置(index)でしか対応づけないため、
-   上端削除+下端追加のようなケースで誤ペアが起きうる。
+1. Multiple changes on one line get highlighted as a single blob
+   (`foo(buf, size)` → `foo(obj->buf, obj->size)` highlights the whole
+   middle). Unavoidable without word-diff-style boundaries; a design
+   decision.
+2. Multi-line pairing is positional (by index) only, so removing a line
+   at the top and adding at the bottom can produce misleading pairs.
 
-## オラクルのテスト観点(t9400-diff-highlight.sh)
+## Oracle test coverage (t9400-diff-highlight.sh)
 
-`dh_test a b` は「a の内容でコミット → b に書き換えて diff と commit を生成 →
-両方を diff-highlight に通し、`@@` 以降を色デコードして期待値と比較」する。
+`dh_test a b`: commit a file with contents `a`, rewrite to `b`, generate
+both `git diff` and `git show` output, run diff-highlight on each, strip
+the header, decode colors, compare against expected.
 
-- 先頭/末尾/中間のハイライト
-- 行全体が違う場合はハイライトしない
-- ハンクの行数不一致(failure 扱い)
-- マルチバイト UTF-8 / 結合文字(後者は failure 扱い)
-- `--graph`(色なし/色あり、先頭 `-` 付きグラフ)
-- combined diff は無視
-- 末尾改行の削除(`\ No newline at end of file`)
-- 色設定: set/reset モード、normal/highlight モード
+- highlights beginning / end / middle of a line
+- no highlight when the whole line differs
+- mismatched hunk sizes (expected failure)
+- multibyte UTF-8 / combining code points (latter expected failure)
+- `--graph` (plain / colored / graph with leading `-`)
+- combined diffs ignored
+- removed final newline (`\ No newline at end of file`)
+- color config: set/reset mode, normal/highlight mode
