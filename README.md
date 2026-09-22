@@ -20,7 +20,8 @@ same as the Perl original. Defaults work even when `git` is absent.
 ## Development
 
 ```console
-$ go test ./...   # unit tests, golden tests, oracle byte-diff harness
+$ make test   # full test suite: unit tests, golden tests, oracle byte-diff harness
+$ make ci     # lint (gofmt/vet/go fix) + tests, what CI runs
 ```
 
 Layout: `main.go` (I/O + line state machine), `highlight.go` (pair
