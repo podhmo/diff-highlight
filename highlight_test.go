@@ -156,6 +156,14 @@ func TestHighlightPair(t *testing.T) {
 			wantB: "\x1b[32m+f\x1b[7m0\x1b[27mo\x1b[m\n",
 		},
 		{
+			// seenPlusMinus only forgives the first -/+ marker;
+			// a second one mid-line is highlighted as content
+			name: "second -/+ pair mid-line is highlighted, not skipped",
+			a:    "-x-y\n", b: "+x+y\n",
+			wantA: "-x\x1b[7m-\x1b[27my\n",
+			wantB: "+x\x1b[7m+\x1b[27my\n",
+		},
+		{
 			name: "graph cruft stays, boring check sees past indent",
 			a:    "| -foo\n", b: "| +f0o\n",
 			graphInd: 2,

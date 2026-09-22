@@ -1,0 +1,5 @@
+<GREEN>*<RESET> <YELLOW>commit abc<RESET>
+<CYAN>|<RESET> diff --git a/f b/f
+<CYAN>|<RESET> @@ -1 +1 @@
+<CYAN>|<RESET> -f<REVERSE>o<NOREVERSE>o
+<CYAN>|<RESET> +f<REVERSE>0<NOREVERSE>o
