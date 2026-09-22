@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -19,6 +20,9 @@ func TestMain(m *testing.M) {
 	if err == nil {
 		defer os.RemoveAll(dir)
 		bin := filepath.Join(dir, "diff-highlight")
+		if runtime.GOOS == "windows" { // go build -o appends .exe on Windows
+			bin += ".exe"
+		}
 		if _, lookErr := exec.LookPath("go"); lookErr == nil {
 			out, buildErr := exec.Command("go", "build", "-o", bin, ".").CombinedOutput()
 			if buildErr == nil {
