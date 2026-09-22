@@ -1,0 +1,5 @@
+[32m*[m [33mcommit abc[m
+[36m|[m diff --git a/f b/f
+[36m|[m @@ -1 +1 @@
+[36m|[m -foo
+[36m|[m +f0o

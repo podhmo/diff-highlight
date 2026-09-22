@@ -54,15 +54,18 @@ Oracle: `oracle/`.
 - [x] Cross-platform (Windows support)
   - `os.DevNull` used for the `git config` stderr redirect (never
     hardcode `/dev/null`).
-  - `\r\n` input covered by golden test (`crlf.in`). Runtime verification
-    on Windows itself is still pending.
-- [ ] Windows console VT processing (split out per review on PR #2;
+  - `\r\n` input covered by golden test (`crlf.in`). Runtime
+    verification on Windows itself: the windows-latest CI job runs
+    `go test` (including the `crlf.in` golden).
+- [x] Windows console VT processing (split out per review on PR #2;
       deferred to a follow-up)
-  - On cmd.exe/PowerShell consoles ANSI escapes print raw until
-    `ENABLE_VIRTUAL_TERMINAL_PROCESSING` is set on the console handle.
-    Enable it when stdout/stderr are real consoles (leave pipes/files
-    alone): `windows.GetConsoleMode` + `SetConsoleMode(mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)`
-    via `golang.org/x/sys/windows` (allowed per `docs/design.md`).
+  - `vt_windows.go` sets `ENABLE_VIRTUAL_TERMINAL_PROCESSING` on
+    stdout/stderr via `golang.org/x/sys/windows`
+    (`GetConsoleMode`/`SetConsoleMode`), so ANSI renders on
+    cmd.exe/PowerShell consoles. Non-console handles (pipes, files,
+    MSYS2/git-bash ptys, which already speak ANSI) fail `GetConsoleMode`
+    and are left alone. `vt_other.go` is a no-op elsewhere. Compile-only
+    on Linux; the windows-latest CI job covers the build.
   - The Perl oracle doesn't do this either; under git-bash/MSYS2 ANSI
     works through the pty regardless.
 
@@ -82,12 +85,18 @@ dependency — check CI first). Cover at least:
 - [x] Multibyte UTF-8 treated as a single character
 - [x] Combining code points (oracle marks expected failure: documented as
       a known limitation in `docs/bugs/oracle-limitations.md`)
-- [x] `--graph` (plain / nested / graph with leading `-`)
+- [x] `--graph` (plain / nested / graph with leading `-` / colored
+      graph cruft)
 - [x] Combined diffs pass through
 - [x] Removed final newline (`\ No newline at end of file`)
 - [x] Color config: set/reset mode and normal/highlight mode (real
       `git config` via `GIT_CONFIG_*` env in tests, injected cache in
       goldens, and the fallback)
+- [x] Real `git diff` and `git show` output (the two streams `dh_test`
+      exercises): `TestGitDiffEndToEnd` commits a change in a scratch
+      repo and requires the header (everything before the first `@@`)
+      to pass through byte-identically while the hunk part matches the
+      expected `decodeColor` output. git is present in CI.
 
 ## Verification tasks (golden test elaboration and bug hunting)
 
@@ -99,7 +108,12 @@ Run these last, after the implementation is done.
   - `\r\n` newlines, tabs, whitespace-only changes
   - Broken/truncated ANSI sequences, color-only lines
   - Multiple consecutive hunks, invalid UTF-8 byte sequences
-  - (huge hunks not covered: left as future work if it matters)
+  - `git show`-style commit headers (`commit-header.in`), interleaved
+    `-`/`+` lines inside one hunk (`interleaved.in` — documents the
+    removed-block-then-added-block emission order), colored `--graph`
+    cruft (`graph-colored.in`)
+  - Huge hunks: a 500-line hunk goes through the oracle harness
+    (`large-hunk` in `TestOracleComparison`)
 - [x] Oracle diff harness
   - `TestOracleComparison` feeds the same input to the Perl oracle and
     the Go binary and byte-compares the output (all golden inputs, the

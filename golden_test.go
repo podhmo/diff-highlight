@@ -44,8 +44,11 @@ var goldenCases = []goldenCase{
 		"newnormal": "\x1b[32m", "newhighlight": "\x1b[33m",
 	}},
 	// edge cases beyond t9400
+	{name: "commit-header"}, // `git show` style: header must pass through
 	{name: "graph-commits"},
 	{name: "graph-nested"},
+	{name: "graph-colored"}, // --graph --color: COLOR? atoms in graphStartRe
+	{name: "interleaved"},   // -/+ interleaved: removed block emits first
 	{name: "not-a-diff"},
 	{name: "empty-input"},
 	{name: "blank-lines"},

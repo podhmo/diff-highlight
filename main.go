@@ -129,6 +129,7 @@ func (f *filter) showHunk(a, b []string) {
 }
 
 func main() {
+	enableVirtualTerminal()
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush() //nolint:errcheck
 	if err := newFilter(out).run(os.Stdin); err != nil {

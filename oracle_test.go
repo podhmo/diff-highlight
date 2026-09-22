@@ -99,6 +99,18 @@ func TestOracleComparison(t *testing.T) {
 		)
 	}
 
+	// a large hunk: 500 changed lines (the "huge hunks" smoke check
+	// tasks.md left as future work — cheap to include here)
+	var big bytes.Buffer
+	big.WriteString("@@ -1,500 +1,500 @@\n")
+	for i := range 500 {
+		fmt.Fprintf(&big, "-line %04d old\n", i)
+	}
+	for i := range 500 {
+		fmt.Fprintf(&big, "+line %04d new\n", i)
+	}
+	cases = append(cases, oracleCase{name: "large-hunk", input: big.Bytes()})
+
 	// deterministic fuzz: plausible-looking diff/graph/color lines
 	rng := rand.New(rand.NewSource(1))
 	atoms := []string{
