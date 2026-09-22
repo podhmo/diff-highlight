@@ -5,7 +5,9 @@ Go で git/contrib/diff-highlight を完全再現するためのタスク。
 
 方針:
 
-- 依存は標準ライブラリのみ。
+- 依存は最小限。標準ライブラリを基本とするが、Windows 対応などに
+  必要なら最小限の外部依存(例: `golang.org/x/sys`)は許容する。
+- Windows でも動作すること(Linux/macOS 専用のコードにしない)。
 - `package main` をトップレベルに置き、
   `go install github.com/podhmo/diff-highlight@latest` でインストールできる構成
   にする(既存の空の `main.go` の位置を維持)。内部実装は必要に応じて
@@ -48,7 +50,16 @@ Go で git/contrib/diff-highlight を完全再現するためのタスク。
   - stdin を 1 行ずつ読み `handleLine` に流し、EOF で flush。
   - `bufio.Writer` を使い、空行受信時に `Flush()`。
   - SIGPIPE: Go では stdout への SIGPIPE で既定終了するため、
-    オラクルの `$SIG{PIPE} = 'DEFAULT'` と同等。パイプ切断時の挙動を確認。
+    オラクルの `$SIG{PIPE} = 'DEFAULT'` と同等。パイプ切断時の挙動を確認
+    (Windows には SIGPIPE がないので `EPIPE` エラーの扱いだけ確認)。
+- [ ] クロスプラットフォーム(Windows 対応)
+  - devnull は `os.DevNull` を使う(オラクルの `File::Spec->devnull()` 相当。
+    `/dev/null` 直書きしない)。
+  - 出力先がターミナルのとき ANSI が通るか確認。cmd.exe/PowerShell で
+    必要なら virtual terminal processing を有効化する
+    (`golang.org/x/sys/windows` の `SetConsoleMode`)。ここだけのために
+    依存を増やすかは要検討。
+  - パス・改行(`\r\n`)・`git config` 呼び出しが Windows でも動くか確認。
 
 ## テストタスク(オラクルを基準にした golden テスト)
 
