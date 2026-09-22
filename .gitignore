@@ -1,0 +1,11 @@
+# Build artifacts
+/diff-highlight
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Coverage
+coverage.*
