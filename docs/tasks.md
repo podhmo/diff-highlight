@@ -66,6 +66,8 @@ Oracle: `oracle/`.
     MSYS2/git-bash ptys, which already speak ANSI) fail `GetConsoleMode`
     and are left alone. `vt_other.go` is a no-op elsewhere. Compile-only
     on Linux; the windows-latest CI job covers the build.
+  - The mode is intentionally not restored on exit — recorded in
+    `docs/bugs/windows-vt-mode-persists.md`.
   - The Perl oracle doesn't do this either; under git-bash/MSYS2 ANSI
     works through the pty regardless.
 
